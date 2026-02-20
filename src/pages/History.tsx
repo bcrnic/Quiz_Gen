@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import StreakBadge from "@/components/StreakBadge";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { useAuth } from "@/hooks/useAuth";
 
 interface QuizResult {
   id: string;
@@ -18,10 +19,18 @@ interface QuizResult {
 
 const History = () => {
   const { t } = useLanguage();
+  const { user, loading: authLoading } = useAuth();
   const [results, setResults] = useState<QuizResult[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setLoading(false);
+      setResults([]);
+      return;
+    }
+
     const fetchResults = async () => {
       const { data, error } = await supabase
         .from("quiz_results")
@@ -36,7 +45,7 @@ const History = () => {
       setLoading(false);
     };
     fetchResults();
-  }, []);
+  }, [authLoading, user, t.failedLoadHistory]);
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 

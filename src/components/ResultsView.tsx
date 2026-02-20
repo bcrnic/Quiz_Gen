@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import confetti from "canvas-confetti";
 import { useLanguage } from "@/i18n/LanguageContext";
+import type { Json } from "@/integrations/supabase/types";
 
 interface ResultsViewProps {
   questions: QuizQuestion[];
@@ -23,6 +24,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({
   const { t } = useLanguage();
   const [showReview, setShowReview] = React.useState(false);
   const { user } = useAuth();
+  const savedRef = React.useRef(false);
   const correct = userAnswers.filter((a, i) => a === questions[i].correctAnswer).length;
   const score = Math.round((correct / questions.length) * 100);
 
@@ -53,6 +55,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({
 
   React.useEffect(() => {
     if (!user) return;
+    if (savedRef.current) return;
     const saveResult = async () => {
       const { error } = await supabase.from("quiz_results").insert({
         user_id: user.id,
@@ -60,16 +63,19 @@ const ResultsView: React.FC<ResultsViewProps> = ({
         total_questions: questions.length,
         correct_answers: correct,
         score,
-        questions: questions as any,
-        user_answers: userAnswers as any,
+        questions: questions as unknown as Json,
+        user_answers: userAnswers as unknown as Json,
       });
       if (error) {
         console.error("Failed to save result:", error);
         toast.error(t.failedSaveResult);
+        return;
       }
+
+      savedRef.current = true;
     };
     saveResult();
-  }, []);
+  }, [user, fileName, questions, userAnswers, correct, score, t.failedSaveResult]);
 
   const exportPDF = () => {
     const doc = new jsPDF();
