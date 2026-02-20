@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,8 +21,9 @@ const pageVariants: Variants = {
 };
 
 const Index = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [state, setState] = useState<AppState>("upload");
   const [textContent, setTextContent] = useState("");
   const [fileName, setFileName] = useState("");
@@ -38,16 +39,58 @@ const Index = () => {
   };
 
   const handleStartQuiz = async (count: number, difficulty: Difficulty, timeLimitMinutes: number | null) => {
+    if (authLoading) return;
+    if (!user) {
+      toast.error(t.authFailed);
+      navigate("/auth");
+      return;
+    }
+
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    const accessToken = refreshData.session?.access_token;
+    if (refreshError || !accessToken) {
+      await supabase.auth.signOut();
+      toast.error(t.authFailed);
+      navigate("/auth");
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(
+        decodeURIComponent(
+          atob(accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
+            .split("")
+            .map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`)
+            .join(""),
+        ),
+      );
+      console.log("jwt payload", { iss: payload?.iss, aud: payload?.aud, exp: payload?.exp });
+    } catch (_e) {
+      console.log("jwt payload", "<failed to decode>");
+    }
+
     setTimeLimit(timeLimitMinutes);
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-quiz", {
-        body: { textContent, questionCount: count, difficulty },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-quiz`, {
+        method: "POST",
+        headers: {
+          apikey,
+          Authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ textContent, questionCount: count, difficulty }),
       });
 
-      if (error) {
-        toast.error("Failed to generate quiz. Please try again.");
-        console.error(error);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg = data?.error || data?.message || "Failed to generate quiz. Please try again.";
+        toast.error(msg);
+        console.error("generate-quiz failed:", res.status, data);
         return;
       }
 

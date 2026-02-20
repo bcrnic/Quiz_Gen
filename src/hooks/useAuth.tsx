@@ -12,7 +12,7 @@ export const useAuth = () => {
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.refreshSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
