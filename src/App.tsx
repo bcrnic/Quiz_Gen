@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { LanguageProvider } from "@/i18n/LanguageContext";
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -43,6 +44,24 @@ const GlobalControls = () => {
 };
 
 const App = () => (
+  !isSupabaseConfigured ? (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-8">
+        <h1 className="text-foreground font-bold text-2xl mb-2">Supabase is not configured</h1>
+        <p className="text-muted-foreground mb-4">
+          Set environment variables in a local <code className="font-mono">.env</code> file and restart the dev server.
+        </p>
+        <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground mb-4">
+          <div>MODE: <code className="font-mono">{import.meta.env.MODE}</code></div>
+          <div>VITE_SUPABASE_URL: <code className="font-mono">{import.meta.env.VITE_SUPABASE_URL ? "set" : "missing"}</code></div>
+          <div>VITE_SUPABASE_PUBLISHABLE_KEY: <code className="font-mono">{import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? "set" : "missing"}</code></div>
+        </div>
+        <div className="rounded-xl bg-muted px-4 py-3 font-mono text-sm text-foreground whitespace-pre-wrap">
+          VITE_SUPABASE_URL=\"https://YOUR_PROJECT.supabase.co\"\nVITE_SUPABASE_PUBLISHABLE_KEY=\"YOUR_SUPABASE_ANON_KEY\"\n
+        </div>
+      </div>
+    </div>
+  ) : (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
       <TooltipProvider>
@@ -62,6 +81,7 @@ const App = () => (
       </TooltipProvider>
     </LanguageProvider>
   </QueryClientProvider>
+  )
 );
 
 export default App;

@@ -51,7 +51,11 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesReady }) => {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items
-        .map((item: any) => item.str)
+        .map((item) => {
+          const maybe = item as unknown as { str?: string };
+          return typeof maybe.str === "string" ? maybe.str : "";
+        })
+        .filter((s) => s.length > 0)
         .join(" ");
       pages.push(pageText);
     }

@@ -10,7 +10,8 @@ import FileUpload from "@/components/FileUpload";
 import QuizSetup from "@/components/QuizSetup";
 import QuizView from "@/components/QuizView";
 import ResultsView from "@/components/ResultsView";
-import { QuizQuestion, Difficulty } from "@/types/quiz";
+import { QuizAnswer, QuizQuestion, Difficulty } from "@/types/quiz";
+import { buildQuestionBankId, parseQuestionBank } from "@/lib/questionBank";
 
 type AppState = "upload" | "setup" | "quiz" | "results";
 
@@ -28,14 +29,34 @@ const Index = () => {
   const [textContent, setTextContent] = useState("");
   const [fileName, setFileName] = useState("");
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
-  const [userAnswers, setUserAnswers] = useState<(string | null)[]>([]);
+  const [userAnswers, setUserAnswers] = useState<QuizAnswer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [timeLimit, setTimeLimit] = useState<number | null>(null);
+  const [bank, setBank] = useState<QuizQuestion[] | null>(null);
+  const [bankId, setBankId] = useState<string | null>(null);
 
   const handleFilesReady = (content: string, names: string[]) => {
     setTextContent(content);
     setFileName(names.join(", "));
+    try {
+      const parsed = parseQuestionBank(content);
+      setBank(parsed.length > 0 ? parsed : null);
+      setBankId(parsed.length > 0 ? buildQuestionBankId(content) : null);
+    } catch (_e) {
+      setBank(null);
+      setBankId(null);
+    }
     setState("setup");
+  };
+
+  const getNextFromBank = (count: number) => {
+    if (!bank || !bankId) return null;
+    const usedKey = `${bankId}_used`;
+    const usedIds = new Set<string>(JSON.parse(localStorage.getItem(usedKey) || "[]"));
+    const available = bank.filter((q) => !usedIds.has(q.id));
+    if (available.length === 0) return { questions: [], usedKey };
+    const next = available.slice(0, count);
+    return { questions: next, usedKey };
   };
 
   const handleStartQuiz = async (count: number, difficulty: Difficulty, timeLimitMinutes: number | null) => {
@@ -43,6 +64,20 @@ const Index = () => {
     if (!user) {
       toast.error(t.authFailed);
       navigate("/auth");
+      return;
+    }
+
+    if (bank && bankId) {
+      const next = getNextFromBank(count);
+      if (!next) return;
+      if (next.questions.length === 0) {
+        toast.error("No more unused questions in this bank. Reset progress by uploading again.");
+        return;
+      }
+      setTimeLimit(timeLimitMinutes);
+      setQuestions(next.questions);
+      setUserAnswers([]);
+      setState("quiz");
       return;
     }
 
@@ -114,8 +149,14 @@ const Index = () => {
     }
   };
 
-  const handleQuizComplete = (answers: (string | null)[]) => {
+  const handleQuizComplete = (answers: QuizAnswer[]) => {
     setUserAnswers(answers);
+    if (bankId) {
+      const usedKey = `${bankId}_used`;
+      const usedIds = new Set<string>(JSON.parse(localStorage.getItem(usedKey) || "[]"));
+      for (const q of questions) usedIds.add(q.id);
+      localStorage.setItem(usedKey, JSON.stringify([...usedIds]));
+    }
     setState("results");
   };
 
@@ -136,6 +177,8 @@ const Index = () => {
     setFileName("");
     setQuestions([]);
     setUserAnswers([]);
+    setBank(null);
+    setBankId(null);
     setState("upload");
   };
 

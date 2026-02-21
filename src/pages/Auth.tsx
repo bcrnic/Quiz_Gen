@@ -41,8 +41,11 @@ const Auth = () => {
         if (error) throw error;
         toast.success(t.checkEmail);
       }
-    } catch (error: any) {
-      toast.error(error.message || t.authFailed);
+    } catch (error: unknown) {
+      const message = typeof error === "object" && error && "message" in error
+        ? String((error as { message: unknown }).message)
+        : t.authFailed;
+      toast.error(message);
     } finally {
       setLoading(false);
     }

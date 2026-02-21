@@ -42,8 +42,11 @@ const ResetPassword = () => {
       if (error) throw error;
       toast.success(t.passwordUpdated);
       navigate("/");
-    } catch (error: any) {
-      toast.error(error.message || t.failedUpdatePassword);
+    } catch (error: unknown) {
+      const message = typeof error === "object" && error && "message" in error
+        ? String((error as { message: unknown }).message)
+        : t.failedUpdatePassword;
+      toast.error(message);
     } finally {
       setLoading(false);
     }

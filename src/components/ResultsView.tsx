@@ -1,5 +1,5 @@
 import React from "react";
-import { QuizQuestion } from "@/types/quiz";
+import { QuizAnswer, QuizQuestion } from "@/types/quiz";
 import { Trophy, RotateCcw, CheckCircle2, XCircle, ChevronDown, ChevronUp, Download, Lightbulb } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,7 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 
 interface ResultsViewProps {
   questions: QuizQuestion[];
-  userAnswers: (string | null)[];
+  userAnswers: QuizAnswer[];
   fileName: string;
   onNewQuiz: () => void;
   onUploadNew: () => void;
@@ -25,7 +25,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({
   const [showReview, setShowReview] = React.useState(false);
   const { user } = useAuth();
   const savedRef = React.useRef(false);
-  const correct = userAnswers.filter((a, i) => a === questions[i].correctAnswer).length;
+  const correct = questions.filter((q, i) => {
+    const a = userAnswers[i];
+    if (!a) return false;
+    if (q.type === "mcq") return a.type === "mcq" && a.answer === q.correctAnswer;
+    if (q.type === "yesno") return a.type === "yesno" && a.answers.every((v, idx) => v === q.correct[idx]);
+    if (q.type === "matching") return a.type === "matching" && a.matches.every((v, idx) => v === idx);
+    return false;
+  }).length;
   const score = Math.round((correct / questions.length) * 100);
 
   const getScoreColor = () => {
@@ -116,7 +123,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({
 
     questions.forEach((q, i) => {
       checkPage(45);
-      const isCorrect = userAnswers[i] === q.correctAnswer;
+      const isCorrect = (() => {
+        const a = userAnswers[i];
+        if (!a) return false;
+        if (q.type === "mcq") return a.type === "mcq" && a.answer === q.correctAnswer;
+        if (q.type === "yesno") return a.type === "yesno" && a.answers.every((v, idx) => v === q.correct[idx]);
+        if (q.type === "matching") return a.type === "matching" && a.matches.every((v, idx) => v === idx);
+        return false;
+      })();
 
       doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
@@ -128,27 +142,55 @@ const ResultsView: React.FC<ResultsViewProps> = ({
       doc.text(qLines, margin + 8, y);
       y += qLines.length * 5 + 3;
 
-      (["A", "B", "C", "D"] as const).forEach((key) => {
-        checkPage(8);
-        const isAnswer = key === q.correctAnswer;
-        const isUserPick = key === userAnswers[i];
+      if (q.type === "mcq") {
+        (["A", "B", "C", "D"] as const).forEach((key) => {
+          checkPage(8);
+          const isAnswer = key === q.correctAnswer;
+          const isUserPick = userAnswers[i]?.type === "mcq" ? key === userAnswers[i].answer : false;
 
-        doc.setFont("helvetica", isAnswer ? "bold" : "normal");
-        doc.setFontSize(10);
+          doc.setFont("helvetica", isAnswer ? "bold" : "normal");
+          doc.setFontSize(10);
 
-        if (isAnswer) {
-          doc.setTextColor(34, 160, 100);
-        } else if (isUserPick) {
-          doc.setTextColor(220, 50, 50);
-        } else {
-          doc.setTextColor(120);
-        }
+          if (isAnswer) {
+            doc.setTextColor(34, 160, 100);
+          } else if (isUserPick) {
+            doc.setTextColor(220, 50, 50);
+          } else {
+            doc.setTextColor(120);
+          }
 
-        const optText = `${key}) ${q.options[key]}${isAnswer ? " ✓" : ""}${isUserPick && !isAnswer ? ` ${t.pdfYourAnswer}` : ""}`;
-        const optLines = doc.splitTextToSize(optText, pageWidth - margin * 2 - 15);
-        doc.text(optLines, margin + 12, y);
-        y += optLines.length * 5 + 1;
-      });
+          const optText = `${key}) ${q.options[key]}${isAnswer ? " ✓" : ""}${isUserPick && !isAnswer ? ` ${t.pdfYourAnswer}` : ""}`;
+          const optLines = doc.splitTextToSize(optText, pageWidth - margin * 2 - 15);
+          doc.text(optLines, margin + 12, y);
+          y += optLines.length * 5 + 1;
+        });
+      }
+
+      if (q.type === "yesno") {
+        const a = userAnswers[i];
+        q.statements.forEach((s, idx) => {
+          checkPage(10);
+          doc.setTextColor(40);
+          const line = `- ${s} (correct: ${q.correct[idx]}) (yours: ${a?.type === "yesno" ? a.answers?.[idx] ?? "" : ""})`;
+          const lns = doc.splitTextToSize(line, pageWidth - margin * 2);
+          doc.text(lns, margin + 8, y);
+          y += lns.length * 5 + 1;
+        });
+      }
+
+      if (q.type === "matching") {
+        const a = userAnswers[i];
+        q.pairs.forEach((p, idx) => {
+          checkPage(10);
+          const yours = a?.type === "matching" && a.matches?.[idx] !== null && a.matches?.[idx] !== undefined
+            ? q.pairs[a.matches[idx]]?.right
+            : "";
+          const line = `- ${p.left} => ${p.right} (yours: ${yours})`;
+          const lns = doc.splitTextToSize(line, pageWidth - margin * 2);
+          doc.text(lns, margin + 8, y);
+          y += lns.length * 5 + 1;
+        });
+      }
 
       y += 6;
     });
@@ -190,7 +232,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({
       {onRetryWrong && correct < questions.length && (
         <button
           onClick={() => {
-            const wrong = questions.filter((_, i) => userAnswers[i] !== questions[i].correctAnswer);
+            const wrong = questions.filter((q, i) => {
+              const a = userAnswers[i];
+              if (!a) return true;
+              if (q.type === "mcq") return !(a.type === "mcq" && a.answer === q.correctAnswer);
+              if (q.type === "yesno") return !(a.type === "yesno" && a.answers.every((v, idx) => v === q.correct[idx]));
+              if (q.type === "matching") return !(a.type === "matching" && a.matches.every((v, idx) => v === idx));
+              return true;
+            });
             onRetryWrong(wrong);
           }}
           className="w-full py-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive font-semibold flex items-center justify-center gap-2 hover:bg-destructive/20 transition-colors mb-4"
@@ -219,7 +268,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({
       {showReview && (
         <div className="space-y-4 animate-fade-in">
           {questions.map((q, i) => {
-            const isCorrect = userAnswers[i] === q.correctAnswer;
+            const a = userAnswers[i];
+            const isCorrect = (() => {
+              if (!a) return false;
+              if (q.type === "mcq") return a.type === "mcq" && a.answer === q.correctAnswer;
+              if (q.type === "yesno") return a.type === "yesno" && a.answers.every((v, idx) => v === q.correct[idx]);
+              if (q.type === "matching") return a.type === "matching" && a.matches.every((v, idx) => v === idx);
+              return false;
+            })();
             return (
               <div key={i} className="gradient-card rounded-xl p-5 border border-border">
                 <div className="flex items-start gap-3 mb-3">
@@ -233,9 +289,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({
                   </p>
                 </div>
                 <div className="ml-8 space-y-1">
-                  {(["A", "B", "C", "D"] as const).map((key) => {
+                  {q.type === "mcq" && (["A", "B", "C", "D"] as const).map((key) => {
                     const isAnswer = key === q.correctAnswer;
-                    const isUserPick = key === userAnswers[i];
+                    const isUserPick = a?.type === "mcq" ? key === a.answer : false;
                     return (
                       <div
                         key={key}
@@ -251,6 +307,36 @@ const ResultsView: React.FC<ResultsViewProps> = ({
                       </div>
                     );
                   })}
+
+                  {q.type === "yesno" && (
+                    <div className="space-y-2">
+                      {q.statements.map((s, idx) => (
+                        <div key={idx} className="text-sm">
+                          <div className="text-muted-foreground">{s}</div>
+                          <div className="text-foreground">
+                            correct: <span className="text-success font-medium">{q.correct[idx]}</span> / yours: <span className={a?.type === "yesno" && a.answers?.[idx] === q.correct[idx] ? "text-success" : "text-destructive"}>{a?.type === "yesno" ? a.answers?.[idx] ?? "" : ""}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {q.type === "matching" && (
+                    <div className="space-y-2">
+                      {q.pairs.map((p, idx) => {
+                        const yoursIdx = a?.type === "matching" ? a.matches?.[idx] : null;
+                        const yours = typeof yoursIdx === "number" ? q.pairs[yoursIdx]?.right : "";
+                        return (
+                          <div key={idx} className="text-sm">
+                            <div className="text-muted-foreground">{p.left}</div>
+                            <div className="text-foreground">
+                              correct: <span className="text-success font-medium">{p.right}</span> / yours: <span className={yours === p.right ? "text-success" : "text-destructive"}>{yours}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 {q.explanation && (
                   <div className="ml-8 mt-2 p-3 rounded-lg bg-primary/5 border border-primary/20 flex gap-2">
