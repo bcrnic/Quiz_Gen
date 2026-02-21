@@ -17,6 +17,22 @@ const formatTime = (seconds: number) => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
+const buildDeterministicOrder = (seedSource: string, length: number) => {
+  const arr = Array.from({ length }, (_, i) => i);
+  let seed = 0;
+  for (let i = 0; i < seedSource.length; i++) {
+    seed = (seed * 31 + seedSource.charCodeAt(i)) >>> 0;
+  }
+
+  for (let i = arr.length - 1; i > 0; i--) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const j = seed % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+
+  return arr;
+};
+
 const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit }) => {
   const { t } = useLanguage();
   const [current, setCurrent] = useState(0);
@@ -28,6 +44,7 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
     }),
   );
   const [selected, setSelected] = useState<McqOptionKey | null>(null);
+  const [selectedRight, setSelectedRight] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [timeLeft, setTimeLeft] = useState<number | null>(timeLimit ? timeLimit * 60 : null);
@@ -81,6 +98,13 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
     const currentAnswer = answers[current];
     if (currentAnswer.type !== "matching") return;
     const next = [...currentAnswer.matches];
+    if (rightIdx !== null) {
+      for (let i = 0; i < next.length; i++) {
+        if (i !== leftIdx && next[i] === rightIdx) {
+          next[i] = null;
+        }
+      }
+    }
     next[leftIdx] = rightIdx;
     const newAnswers = [...answers];
     newAnswers[current] = { type: "matching", matches: next };
@@ -94,8 +118,13 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
     }
     setCurrent((c) => c + 1);
     setSelected(null);
+    setSelectedRight(null);
     setRevealed(false);
   }, [answers, current, onComplete, questions.length]);
+
+  useEffect(() => {
+    setSelectedRight(null);
+  }, [current]);
 
   const revealNonMcqIfComplete = () => {
     if (revealed) return;
@@ -142,6 +171,28 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
   };
 
   const timerUrgent = timeLeft !== null && timeLeft <= 60;
+  const currentAnswer = answers[current];
+  const nonMcqComplete = (() => {
+    if (q.type === "yesno") {
+      return currentAnswer.type === "yesno" && !currentAnswer.answers.some((x) => x === null);
+    }
+    if (q.type === "matching") {
+      return currentAnswer.type === "matching" && !currentAnswer.matches.some((x) => x === null);
+    }
+    return false;
+  })();
+
+  const matchingOrder = q.type === "matching" ? buildDeterministicOrder(q.id, q.pairs.length) : [];
+  const matchingAnswer = q.type === "matching" && currentAnswer.type === "matching" ? currentAnswer : null;
+  const matchingRemaining = matchingAnswer ? matchingAnswer.matches.filter((x) => x === null).length : 0;
+  const matchingRightAssignedTo = (() => {
+    const m = new Map<number, number>();
+    if (!matchingAnswer) return m;
+    matchingAnswer.matches.forEach((rightIdx, leftIdx) => {
+      if (rightIdx !== null) m.set(rightIdx, leftIdx);
+    });
+    return m;
+  })();
 
   return (
     <div className="w-full max-w-2xl mx-auto animate-fade-in">
@@ -241,29 +292,97 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
       )}
 
       {q.type === "matching" && (
-        <div className="space-y-3 mb-6">
-          {q.pairs.map((p, leftIdx) => {
-            const a = answers[current];
-            const picked = a.type === "matching" ? a.matches[leftIdx] : null;
-            return (
-              <div key={leftIdx} className="gradient-card rounded-xl p-5 border border-border flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
-                <div className="text-foreground font-semibold flex-1 min-w-0 break-words">{p.left}</div>
-                <select
-                  className="bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full sm:w-96 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
-                  disabled={revealed}
-                  value={picked === null ? "" : String(picked)}
-                  onChange={(e) => handleMatch(leftIdx, e.target.value === "" ? null : Number(e.target.value))}
-                >
-                  <option value="">Select...</option>
-                  {q.pairs.map((pp, idx) => (
-                    <option key={idx} value={idx}>
-                      {pp.right}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            );
-          })}
+        <div className="mb-6 space-y-4">
+          <div className="rounded-xl border border-border bg-card/40 p-3 text-sm text-muted-foreground flex items-center justify-between gap-2">
+            <span>
+              {selectedRight === null
+                ? "Pick an option on the right, then tap a statement on the left."
+                : "Tap a statement on the left to assign the selected option."}
+            </span>
+            <span className="font-semibold text-foreground">{matchingRemaining}</span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              {q.pairs.map((p, leftIdx) => {
+                const picked = matchingAnswer ? matchingAnswer.matches[leftIdx] : null;
+                const canAssign = !revealed && selectedRight !== null;
+                return (
+                  <button
+                    key={leftIdx}
+                    type="button"
+                    onClick={() => {
+                      if (!canAssign || selectedRight === null) return;
+                      handleMatch(leftIdx, selectedRight);
+                      setSelectedRight(null);
+                    }}
+                    className={`w-full text-left gradient-card rounded-xl p-4 border transition-colors ${
+                      canAssign ? "border-primary/50 hover:border-primary" : "border-border"
+                    }`}
+                  >
+                    <div className="text-foreground font-semibold mb-2 break-words">{p.left}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={`text-sm ${picked === null ? "text-muted-foreground" : "text-foreground"}`}>
+                        {picked === null ? "Not matched yet" : q.pairs[picked].right}
+                      </div>
+                      {picked !== null && !revealed && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMatch(leftIdx, null);
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="space-y-3">
+              {matchingOrder.map((rightIdx) => {
+                const assignedLeftIdx = matchingRightAssignedTo.get(rightIdx);
+                const isSelected = selectedRight === rightIdx;
+                return (
+                  <button
+                    key={rightIdx}
+                    type="button"
+                    disabled={revealed}
+                    onClick={() => setSelectedRight(rightIdx)}
+                    className={`w-full text-left rounded-xl border p-4 transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary/10"
+                        : assignedLeftIdx !== undefined
+                        ? "border-success/40 bg-success/10"
+                        : "border-border bg-card hover:border-primary/50"
+                    }`}
+                  >
+                    <div className="text-foreground font-medium break-words">{q.pairs[rightIdx].right}</div>
+                    {assignedLeftIdx !== undefined && (
+                      <div className="text-xs text-muted-foreground mt-1">Assigned</div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {!revealed && matchingAnswer && (
+            <button
+              type="button"
+              onClick={() => {
+                for (let i = 0; i < q.pairs.length; i++) handleMatch(i, null);
+                setSelectedRight(null);
+              }}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Reset matches
+            </button>
+          )}
         </div>
       )}
 
@@ -277,7 +396,8 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
       {!revealed && q.type !== "mcq" && (
         <button
           onClick={revealNonMcqIfComplete}
-          className="w-full py-4 rounded-xl font-bold text-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+          disabled={!nonMcqComplete}
+          className="w-full py-4 rounded-xl font-bold text-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:hover:bg-secondary"
         >
           {t.nextQuestion}
         </button>

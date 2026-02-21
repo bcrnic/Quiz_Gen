@@ -1,4 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  buildSystemPrompt,
+  extractAssistantContent,
+  normalizeGenerateQuizInput,
+  parseAndValidateQuiz,
+} from "./logic.ts";
 
 const getCorsHeaders = (req: Request) => {
   const origin = req.headers.get("origin");
@@ -26,69 +33,34 @@ serve(async (req) => {
   }
 
   const token = authHeader.replace("Bearer ", "");
-  const parts = token.split(".");
-  if (parts.length !== 3) {
-    return new Response(JSON.stringify({ error: "Malformed JWT" }), {
+
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return new Response(JSON.stringify({ error: "Supabase auth is not configured on the server" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) {
+    return new Response(JSON.stringify({ error: "Token expired or invalid" }), {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   try {
-    const payload = JSON.parse(atob(parts[1]));
-    const now = Math.floor(Date.now() / 1000);
-    if (!payload.sub || payload.exp < now) {
-      return new Response(JSON.stringify({ error: "Token expired or invalid" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-  } catch (_e) {
-    return new Response(JSON.stringify({ error: "Invalid JWT payload" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  try {
-    const { textContent, questionCount, difficulty } = await req.json();
-
-    if (!textContent || textContent.trim().length < 50) {
-      return new Response(
-        JSON.stringify({ error: "Text content is too short. Please provide more study material." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const input = normalizeGenerateQuizInput(await req.json());
 
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
 
     const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini";
-
-    const truncatedContent = textContent.slice(0, 15000);
-    const count = questionCount || 20;
-    const diff = difficulty || "medium";
-
-    const systemPrompt = `You are a quiz generator. Given study material, generate exactly ${count} multiple-choice questions.
-
-Rules:
-- Difficulty: ${diff}
-- Each question has exactly 4 options (A, B, C, D)
-- Exactly 1 correct answer per question
-- For each question, provide a brief explanation (1-2 sentences) of why the correct answer is correct
-- Questions should test comprehension, recall, and understanding
-- Mix question types: factual recall, definitions, concepts, relationships
-- Write questions AND explanations in the same language as the source material
-- Make wrong answers plausible but clearly incorrect
-
-Return ONLY valid JSON (no markdown, no extra text) with this shape:
-{
-  "questions": [
-    {
-      "question": string,
-      "options": { "A": string, "B": string, "C": string, "D": string },
-      "correctAnswer": "A"|"B"|"C"|"D",
-      "explanation": string
-    }
-  ]
-}`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -99,8 +71,8 @@ Return ONLY valid JSON (no markdown, no extra text) with this shape:
       body: JSON.stringify({
         model: OPENAI_MODEL,
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Generate a quiz from this study material:\n\n${truncatedContent}` },
+          { role: "system", content: buildSystemPrompt(input.questionCount, input.difficulty) },
+          { role: "user", content: `Generate a quiz from this study material:\n\n${input.truncatedContent}` },
         ],
       }),
     });
@@ -122,18 +94,8 @@ Return ONLY valid JSON (no markdown, no extra text) with this shape:
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content || typeof content !== "string") {
-      throw new Error("No quiz data returned from AI");
-    }
-
-    let quizData: unknown;
-    try {
-      quizData = JSON.parse(content);
-    } catch (_e) {
-      throw new Error("AI response was not valid JSON");
-    }
+    const content = extractAssistantContent(data);
+    const quizData = parseAndValidateQuiz(content);
 
     return new Response(JSON.stringify(quizData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

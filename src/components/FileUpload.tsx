@@ -1,9 +1,10 @@
 import React, { useCallback, useState } from "react";
 import { Upload, FileText, X, AlertCircle, Plus, Loader2, Type } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useLanguage } from "@/i18n/LanguageContext";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 interface UploadedFile {
   name: string;
