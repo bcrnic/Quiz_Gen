@@ -39,8 +39,12 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
   const [answers, setAnswers] = useState<QuizAnswer[]>(() =>
     questions.map((q) => {
       if (q.type === "mcq") return { type: "mcq", answer: null };
-      if (q.type === "yesno") return { type: "yesno", answers: Array(q.statements.length).fill(null) };
-      return { type: "matching", matches: Array(q.pairs.length).fill(null) };
+      if (q.type === "yesno") {
+        const len = Array.isArray(q.statements) ? q.statements.length : 0;
+        return { type: "yesno", answers: Array(len).fill(null) };
+      }
+      const len = Array.isArray(q.pairs) ? q.pairs.length : 0;
+      return { type: "matching", matches: Array(len).fill(null) };
     }),
   );
   const [selected, setSelected] = useState<McqOptionKey | null>(null);
@@ -65,8 +69,28 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
     return () => clearInterval(interval);
   }, [timeLeft, finishQuiz]);
 
+  useEffect(() => {
+    setCurrent(0);
+    setSelected(null);
+    setSelectedRight(null);
+    setRevealed(false);
+    setCorrectCount(0);
+    setTimeLeft(timeLimit ? timeLimit * 60 : null);
+    setAnswers(
+      questions.map((q) => {
+        if (q.type === "mcq") return { type: "mcq", answer: null };
+        if (q.type === "yesno") {
+          const len = Array.isArray(q.statements) ? q.statements.length : 0;
+          return { type: "yesno", answers: Array(len).fill(null) };
+        }
+        const len = Array.isArray(q.pairs) ? q.pairs.length : 0;
+        return { type: "matching", matches: Array(len).fill(null) };
+      }),
+    );
+  }, [questions, timeLimit]);
+
   const q = questions[current];
-  const progress = ((current + 1) / questions.length) * 100;
+  const progress = questions.length > 0 ? ((current + 1) / questions.length) * 100 : 0;
 
   const markAndReveal = (isCorrect: boolean) => {
     setRevealed(true);
@@ -74,7 +98,7 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
   };
 
   const handleSelectMcq = useCallback((option: McqOptionKey) => {
-    if (revealed || q.type !== "mcq") return;
+    if (revealed || !q || q.type !== "mcq") return;
     setSelected(option);
     const newAnswers = [...answers];
     newAnswers[current] = { type: "mcq", answer: option };
@@ -83,7 +107,7 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
   }, [answers, current, q, revealed]);
 
   const handleYesNo = (idx: number, value: "Yes" | "No") => {
-    if (revealed || q.type !== "yesno") return;
+    if (revealed || !q || q.type !== "yesno") return;
     const currentAnswer = answers[current];
     if (currentAnswer.type !== "yesno") return;
     const next = [...currentAnswer.answers];
@@ -94,7 +118,7 @@ const QuizView: React.FC<QuizViewProps> = ({ questions, onComplete, timeLimit })
   };
 
   const handleMatch = (leftIdx: number, rightIdx: number | null) => {
-    if (revealed || q.type !== "matching") return;
+    if (revealed || !q || q.type !== "matching") return;
     const currentAnswer = answers[current];
     if (currentAnswer.type !== "matching") return;
     const next = [...currentAnswer.matches];

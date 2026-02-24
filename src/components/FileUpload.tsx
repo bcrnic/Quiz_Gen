@@ -79,8 +79,10 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesReady }) => {
       try {
         const text = await extractPdfText(file);
         addFile(file.name, text);
-      } catch {
-        setError(t.pdfParseFailed);
+      } catch (e) {
+        console.error("PDF parse failed", e);
+        const details = e instanceof Error ? e.message : String(e);
+        setError(details ? `${t.pdfParseFailed} (${details})` : t.pdfParseFailed);
       } finally {
         setProcessing(false);
       }

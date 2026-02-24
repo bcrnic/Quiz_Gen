@@ -139,7 +139,30 @@ const Index = () => {
         return;
       }
 
-      setQuestions(data.questions);
+      const normalized: QuizQuestion[] = (data.questions as Array<Record<string, unknown>>).map((q, idx) => {
+        const question = typeof q.question === "string" ? q.question : "";
+        const options = (q.options ?? {}) as Record<string, unknown>;
+        const rawCorrect = typeof q.correctAnswer === "string" ? q.correctAnswer : "";
+        const correctAnswer = (rawCorrect === "A" || rawCorrect === "B" || rawCorrect === "C" || rawCorrect === "D")
+          ? rawCorrect
+          : "A";
+        const explanation = typeof q.explanation === "string" ? q.explanation : undefined;
+        return {
+          id: `ai_${idx}_${question.slice(0, 24).replace(/\s+/g, " ")}`,
+          type: "mcq",
+          question,
+          options: {
+            A: String(options.A ?? ""),
+            B: String(options.B ?? ""),
+            C: String(options.C ?? ""),
+            D: String(options.D ?? ""),
+          },
+          correctAnswer,
+          explanation,
+        };
+      });
+
+      setQuestions(normalized);
       setState("quiz");
     } catch (e) {
       console.error(e);
