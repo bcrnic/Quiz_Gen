@@ -63,6 +63,23 @@ const ResultsView: React.FC<ResultsViewProps> = ({
   React.useEffect(() => {
     if (!user) return;
     if (savedRef.current) return;
+
+    const signatureRaw = JSON.stringify({
+      u: user.id,
+      f: fileName,
+      q: questions.map((q) => q.id),
+      s: score,
+      c: correct,
+    });
+    const signature = Array.from(signatureRaw).reduce((acc, ch) => ((acc << 5) - acc + ch.charCodeAt(0)) | 0, 0);
+    const idempotencyKey = `quiz_result_saved_${signature}`;
+    if (sessionStorage.getItem(idempotencyKey) === "1") {
+      savedRef.current = true;
+      return;
+    }
+    sessionStorage.setItem(idempotencyKey, "1");
+    savedRef.current = true;
+
     const saveResult = async () => {
       const { error } = await supabase.from("quiz_results").insert({
         user_id: user.id,
@@ -76,10 +93,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({
       if (error) {
         console.error("Failed to save result:", error);
         toast.error(t.failedSaveResult);
+        sessionStorage.removeItem(idempotencyKey);
+        savedRef.current = false;
         return;
       }
-
-      savedRef.current = true;
     };
     saveResult();
   }, [user, fileName, questions, userAnswers, correct, score, t.failedSaveResult]);
