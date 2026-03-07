@@ -120,16 +120,13 @@ const parseYesNoGrid = (block: string, id: string): QuizQuestion | null => {
 
   if (boxes.length < 2) return null;
 
-  const promptLines = cleaned
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const questionLineIdx = promptLines.findIndex((l) => /HOTSPOT/i.test(l));
+  const questionLineIdx = lines.findIndex((l) => /HOTSPOT/i.test(l));
   const questionTextStart = questionLineIdx >= 0 ? questionLineIdx + 1 : 0;
-  const questionText = promptLines
-    .slice(questionTextStart)
-    .filter((l) => !/^Correct Answer\s*:/i.test(l))
+
+  const questionText = lines
+    .slice(questionTextStart, idxCorrect)
+    .map(l => l.trim())
+    .filter(Boolean)
     .join(" ")
     .trim();
 
@@ -183,16 +180,13 @@ const parseMatching = (block: string, id: string): QuizQuestion | null => {
 
   if (pairs.length < 2) return null;
 
-  const promptLines = cleaned
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const questionLineIdx = promptLines.findIndex((l) => /DRAG\s*DROP/i.test(l));
+  const questionLineIdx = lines.findIndex((l) => /DRAG\s*DROP/i.test(l));
   const questionTextStart = questionLineIdx >= 0 ? questionLineIdx + 1 : 0;
-  const questionText = promptLines
-    .slice(questionTextStart)
-    .filter((l) => !/^Correct Answer\s*:/i.test(l))
+
+  const questionText = lines
+    .slice(questionTextStart, idxCorrect)
+    .map(l => l.trim())
+    .filter(Boolean)
     .join(" ")
     .trim();
 
