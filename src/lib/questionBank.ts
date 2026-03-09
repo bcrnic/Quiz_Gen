@@ -28,7 +28,18 @@ const stripAfterMarkers = (block: string) => {
   const lines = normalize(block).split("\n");
   const out: string[] = [];
   for (const line of lines) {
-    if (markers.some((m) => line.includes(m))) break;
+    if (markers.some((m) => line.toLowerCase().includes(m.toLowerCase()))) break;
+    out.push(line);
+  }
+  return out.join("\n").trim();
+};
+
+const stripAnswerHints = (text: string) => {
+  const markers = ["Hot Area:", "Box 1:", "Answer:"];
+  const lines = text.split("\n");
+  const out: string[] = [];
+  for (const line of lines) {
+    if (markers.some((m) => line.toLowerCase().includes(m.toLowerCase()))) break;
     out.push(line);
   }
   return out.join("\n").trim();
@@ -120,15 +131,18 @@ const parseYesNoGrid = (block: string, id: string): QuizQuestion | null => {
 
   if (boxes.length < 2) return null;
 
-  const questionLineIdx = lines.findIndex((l) => /HOTSPOT/i.test(l));
+  const questionLineIdx = lines.findIndex((l) => /\b(HOTSPOT|DRAG\s*DROP)\b/i.test(l));
   const questionTextStart = questionLineIdx >= 0 ? questionLineIdx + 1 : 0;
 
-  const questionText = lines
+  const rawQuestionText = lines
     .slice(questionTextStart, idxCorrect)
     .map(l => l.trim())
     .filter(Boolean)
     .join(" ")
     .trim();
+
+  // Further strip if any marker leaked into the slice
+  const questionText = stripAnswerHints(rawQuestionText);
 
   return {
     id,
@@ -180,15 +194,18 @@ const parseMatching = (block: string, id: string): QuizQuestion | null => {
 
   if (pairs.length < 2) return null;
 
-  const questionLineIdx = lines.findIndex((l) => /DRAG\s*DROP/i.test(l));
+  const questionLineIdx = lines.findIndex((l) => /\b(HOTSPOT|DRAG\s*DROP)\b/i.test(l));
   const questionTextStart = questionLineIdx >= 0 ? questionLineIdx + 1 : 0;
 
-  const questionText = lines
+  const rawQuestionText = lines
     .slice(questionTextStart, idxCorrect)
     .map(l => l.trim())
     .filter(Boolean)
     .join(" ")
     .trim();
+
+  // Further strip if any marker leaked into the slice
+  const questionText = stripAnswerHints(rawQuestionText);
 
   return {
     id,
