@@ -68,7 +68,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <GlobalControls />
-          <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <BrowserRouter>
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
