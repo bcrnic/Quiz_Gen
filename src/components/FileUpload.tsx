@@ -19,7 +19,10 @@ interface FileUploadProps {
 const MAX_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = [".txt", ".pdf"];
 
-type InputMode = "file" | "text";
+type InputMode = "file" | "text" | "predefined";
+
+import az900Part1Content from "@/data/az900_part1.txt?raw";
+import az900Part2Content from "@/data/az900_part2.txt?raw";
 
 const FileUpload: React.FC<FileUploadProps> = ({ onFilesReady }) => {
   const { t } = useLanguage();
@@ -137,36 +140,64 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesReady }) => {
       <div className="flex gap-2 mb-6 bg-secondary rounded-xl p-1">
         <button
           onClick={() => { setMode("file"); setError(null); }}
-          className={`flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
-            mode === "file"
-              ? "gradient-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
+          className={`flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all duration-200 ${mode === "file"
+            ? "gradient-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground"
+            }`}
         >
           <Upload className="w-4 h-4" />
           {t.uploadFiles}
         </button>
         <button
           onClick={() => { setMode("text"); setError(null); }}
-          className={`flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
-            mode === "text"
-              ? "gradient-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
+          className={`flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all duration-200 ${mode === "text"
+            ? "gradient-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground"
+            }`}
         >
           <Type className="w-4 h-4" />
           {t.pasteText}
         </button>
+        <button
+          onClick={() => { setMode("predefined"); setError(null); }}
+          className={`flex-1 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all duration-200 ${mode === "predefined"
+            ? "gradient-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground"
+            }`}
+        >
+          <FileText className="w-4 h-4" />
+          {t.predefined}
+        </button>
       </div>
 
-      {mode === "file" ? (
+      {mode === "predefined" ? (
+        <div className="space-y-4 animate-fade-in text-center">
+          <div className="p-6 border border-border bg-card rounded-xl">
+            <h3 className="text-xl font-bold text-foreground mb-2">{t.predefinedTitle}</h3>
+            <p className="text-muted-foreground text-sm mb-6">{t.predefinedSubtitle}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={() => onFilesReady(az900Part1Content, ["AZ-900 Quiz (Part 1)"])}
+                className="py-4 rounded-xl font-bold text-lg gradient-primary text-primary-foreground hover:opacity-90 transition-all duration-200"
+              >
+                {t.az900Part1}
+              </button>
+              <button
+                onClick={() => onFilesReady(az900Part2Content, ["AZ-900 Quiz (Part 2)"])}
+                className="py-4 rounded-xl font-bold text-lg gradient-primary text-primary-foreground hover:opacity-90 transition-all duration-200"
+              >
+                {t.az900Part2}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : mode === "file" ? (
         <>
           <label
-            className={`relative flex flex-col items-center justify-center w-full h-48 rounded-xl border-2 border-dashed cursor-pointer transition-all duration-300 ${
-              dragOver
-                ? "border-primary bg-primary/10 glow-primary"
-                : "border-border bg-card hover:border-primary/50 hover:bg-card/80"
-            }`}
+            className={`relative flex flex-col items-center justify-center w-full h-48 rounded-xl border-2 border-dashed cursor-pointer transition-all duration-300 ${dragOver
+              ? "border-primary bg-primary/10 glow-primary"
+              : "border-border bg-card hover:border-primary/50 hover:bg-card/80"
+              }`}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}

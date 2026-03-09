@@ -38,6 +38,7 @@ export interface Translations {
   uploadSubtitle: string;
   uploadFiles: string;
   pasteText: string;
+  predefined: string;
   dropFiles: string;
   fileTypes: string;
   processingPdf: string;
@@ -56,6 +57,10 @@ export interface Translations {
   facts: (n: number) => string;
   total: string;
   pastedText: string;
+  predefinedTitle: string;
+  predefinedSubtitle: string;
+  az900Part1: string;
+  az900Part2: string;
   numberOfQuestions: string;
   difficulty: string;
   easy: string;
