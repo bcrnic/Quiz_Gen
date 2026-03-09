@@ -47,6 +47,7 @@ const stripAnswerHints = (text: string) => {
 
 const splitQuestionBlocks = (content: string) => {
   const text = normalize(content);
+  // Matches "Question #1" or "Question #1 Topic 1" etc.
   const parts = text.split(/(?=\bQuestion\s*#\d+)/g);
   return parts.map((p) => p.trim()).filter(Boolean);
 };
@@ -78,7 +79,8 @@ const parseMcq = (block: string, id: string): QuizQuestion | null => {
   const correctLine = lines.find((l) => /^Correct Answer\s*:/i.test(l));
   const correct = correctLine?.match(/Correct Answer\s*:\s*([A-D])/i)?.[1] as McqOptionKey | undefined;
 
-  if (!options.A || !options.B || !options.C || !options.D || !correct) return null;
+  // AZ-900 often has only 3 options (A, B, C)
+  if (!options.A || !options.B || !correct) return null;
 
   return {
     id,
